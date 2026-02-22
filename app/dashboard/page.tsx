@@ -5,15 +5,9 @@ import { onAuthStateChanged } from "firebase/auth";
 
 import { auth } from "@/app/lib/firebase";
 import { getSessions, getGoal } from "@/app/lib/firestore";
-import { subjectColors } from "@/app/lib/firestore";
 
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import StudyChart from "@/app/charts/StudyChart";
+import SubjectChart from "@/app/charts/SubjectChart";
 
 /* ================= TYPES ================= */
 
@@ -24,7 +18,7 @@ type Session = {
 };
 
 type Goal = {
-  daily: number;   // minutos
+  daily: number;
   weekly: number;
   monthly: number;
 };
@@ -35,14 +29,11 @@ export default function DashboardPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
 
-  const [chartData, setChartData] = useState<any[]>([]);
-
   /* ================= AUTH ================= */
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) return;
-
       await loadData(user.uid);
     });
 
@@ -54,8 +45,6 @@ export default function DashboardPage() {
   async function loadData(uid: string) {
     const s = await getSessions(uid);
     setSessions(s);
-
-    setChartData(buildChartData(s));
 
     const g = await getGoal(uid);
     if (g) setGoal(g);
@@ -85,87 +74,92 @@ export default function DashboardPage() {
         const d = getDate(s.createdAt);
         return d && filterFn(d);
       })
-      .reduce((acc, cur) => acc + cur.minutes, 0);
+      .reduce((acc, cur) => acc + (cur.minutes || 0), 0);
   }
 
-  function getTodayMinutes() {
-    const today = new Date().toDateString();
+  const today = new Date();
 
-    return sumMinutes((d) => d.toDateString() === today);
-  }
+  const todayMinutes = sumMinutes(
+    (d) => d.toDateString() === today.toDateString()
+  );
 
-  function getWeekMinutes() {
+  const weekMinutes = sumMinutes((d) => {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
+    return d >= weekAgo;
+  });
 
-    return sumMinutes((d) => d >= weekAgo);
-  }
-
-  function getMonthMinutes() {
-    const now = new Date();
-
-    return sumMinutes(
-      (d) =>
-        d.getMonth() === now.getMonth() &&
-        d.getFullYear() === now.getFullYear()
+  const monthMinutes = sumMinutes((d) => {
+    return (
+      d.getMonth() === today.getMonth() &&
+      d.getFullYear() === today.getFullYear()
     );
-  }
-
-  /* ================= GRAPH ================= */
-
-  function buildChartData(list: Session[]) {
-    const map: Record<string, number> = {};
-
-    list.forEach((s) => {
-      map[s.subject] = (map[s.subject] || 0) + s.minutes;
-    });
-
-    return Object.keys(map).map((k) => ({
-      name: k,
-      value: map[k],
-      color: subjectColors[k] || "#94a3b8",
-    }));
-  }
+  });
 
   /* ================= PROGRESS ================= */
 
-  const todayMinutes = getTodayMinutes();
-  const weekMinutes = getWeekMinutes();
-  const monthMinutes = getMonthMinutes();
-
   function calcProgress(done: number, goal?: number) {
-  if (!goal || isNaN(goal) || goal <= 0) return 0;
-  if (!done || isNaN(done)) return 0;
+    if (!goal || goal <= 0) return 0;
+    if (!done || done <= 0) return 0;
 
-  return Math.min(
-    Math.round((done / goal) * 100),
-    100
-  );
-}
-const dailyProgress = calcProgress(
-  todayMinutes,
-  goal?.daily
-);
+    const percent = (done / goal) * 100;
 
-const weeklyProgress = calcProgress(
-  weekMinutes,
-  goal?.weekly
-);
+    if (!isFinite(percent)) return 0;
 
-const monthlyProgress = calcProgress(
-  monthMinutes,
-  goal?.monthly
-);
+    return Math.min(Math.round(percent), 100);
+  }
 
   /* ================= FORMAT ================= */
 
   function formatMinutes(min: number) {
-    if (!min) return "0h 0m";
+    if (!min || !isFinite(min)) return "0h 0m";
 
-    const h = Math.floor(min / 60);
-    const m = min % 60;
+    const total = Math.max(0, Math.floor(min));
+
+    const h = Math.floor(total / 60);
+    const m = total % 60;
 
     return `${h}h ${m}m`;
+  }
+
+  /* ================= CHART DATA ================= */
+
+  function buildStudyLineData() {
+    const map: Record<string, number> = {};
+
+    sessions.forEach((s) => {
+      const d = getDate(s.createdAt);
+      if (!d) return;
+
+      const key = d.toISOString().split("T")[0];
+
+      map[key] = (map[key] || 0) + s.minutes / 60;
+    });
+
+    return Object.keys(map)
+      .sort() // 👉 ORDENA POR DATA
+      .map((k) => ({
+        day: new Date(k).toLocaleDateString("pt-BR"),
+        hours: Number(map[k].toFixed(1)),
+      }));
+  }
+
+  function buildSubjectBarData() {
+    const map: Record<string, number> = {};
+
+    sessions.forEach((s) => {
+      if (!s.subject) return;
+
+      map[s.subject] =
+        (map[s.subject] || 0) + s.minutes / 60;
+    });
+
+    return Object.keys(map)
+      .sort((a, b) => map[b] - map[a]) // 👉 DO MAIOR PRO MENOR
+      .map((k) => ({
+        subject: k,
+        hours: Number(map[k].toFixed(1)),
+      }));
   }
 
   /* ================= RENDER ================= */
@@ -174,8 +168,7 @@ const monthlyProgress = calcProgress(
     <div style={page}>
       <h1 style={title}>Dashboard</h1>
 
-      {/* PROGRESSO DAS METAS */}
-
+      {/* PROGRESSO */}
       <section style={card}>
         <h2 style={sectionTitle}>Progresso das Metas</h2>
 
@@ -183,31 +176,30 @@ const monthlyProgress = calcProgress(
           <div style={progressGrid}>
             <ProgressItem
               title="Diária"
-              percent={dailyProgress}
               value={formatMinutes(todayMinutes)}
+              percent={calcProgress(todayMinutes, goal.daily)}
             />
 
             <ProgressItem
               title="Semanal"
-              percent={weeklyProgress}
               value={formatMinutes(weekMinutes)}
+              percent={calcProgress(weekMinutes, goal.weekly)}
             />
 
             <ProgressItem
               title="Mensal"
-              percent={monthlyProgress}
               value={formatMinutes(monthMinutes)}
+              percent={calcProgress(monthMinutes, goal.monthly)}
             />
           </div>
         ) : (
-          <p style={{ opacity: 0.7 }}>
-            Defina suas metas na aba Metas
+          <p style={{ opacity: 0.6 }}>
+            Defina suas metas para visualizar o progresso
           </p>
         )}
       </section>
 
       {/* RESUMO */}
-
       <section style={statsGrid}>
         <Stat title="Hoje" value={formatMinutes(todayMinutes)} />
         <Stat title="Semana" value={formatMinutes(weekMinutes)} />
@@ -215,32 +207,10 @@ const monthlyProgress = calcProgress(
         <Stat title="Sessões" value={sessions.length.toString()} />
       </section>
 
-      {/* GRÁFICO */}
-
-      <section style={card}>
-        <h2 style={sectionTitle}>Horas por Matéria</h2>
-
-        <div style={{ height: 320 }}>
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie
-                data={chartData}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={120}
-                label={({ name, value }) =>
-                  `${name}: ${Math.round(value / 60)}h`
-                }
-              >
-                {chartData.map((e, i) => (
-                  <Cell key={i} fill={e.color} />
-                ))}
-              </Pie>
-
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+      {/* GRÁFICOS */}
+      <section style={chartsGrid}>
+        <StudyChart data={buildStudyLineData()} />
+        <SubjectChart data={buildSubjectBarData()} />
       </section>
     </div>
   );
@@ -248,12 +218,11 @@ const monthlyProgress = calcProgress(
 
 /* ================= COMPONENTS ================= */
 
-function ProgressItem({ title, percent, value }: any) {
+function ProgressItem({ title, value, percent }: any) {
   return (
     <div style={progressItem}>
       <h4>{title}</h4>
-
-      <p style={{ marginBottom: 6 }}>{value}</p>
+      <p>{value}</p>
 
       <div style={progressBarBg}>
         <div
@@ -313,7 +282,6 @@ const progressGrid = {
 };
 
 const progressItem = {
-  background: "#020617",
   border: "1px solid #1e293b",
   borderRadius: "14px",
   padding: "18px",
@@ -327,21 +295,23 @@ const statsGrid = {
 };
 
 const statCard = {
-  background: "#020617",
   border: "1px solid #1e293b",
   borderRadius: "16px",
   padding: "22px",
   textAlign: "center" as const,
 };
 
+const chartsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "24px",
+};
+
 const progressBarBg = {
-  width: "100%",
   height: "10px",
-  background: "#020617",
   border: "1px solid #1e293b",
   borderRadius: "999px",
   overflow: "hidden",
-  marginBottom: "6px",
 };
 
 const progressBarFill = {
