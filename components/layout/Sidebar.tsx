@@ -13,7 +13,6 @@ const menu = [
   { name: "Cronômetro", path: "/cronometro", icon: "" },
   { name: "Planejamento", path: "/planning", icon: "" },
   { name: "Metas", path: "/goals", icon: "" },
-  { name: "Histórico", path: "/history", icon: "" },
   { name: "Biblioteca", path: "/library", icon: "" },
 ];
 
