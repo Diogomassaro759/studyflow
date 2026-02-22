@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -12,27 +12,30 @@ import {
 
 type Props = {
   data: {
-    subject: string;
+    day: string;
     hours: number;
   }[];
 };
 
-export default function SubjectChart({ data }: Props) {
-  // 👉 LIMPA DADOS COM NaN
+export default function StudyChart({ data }: Props) {
+  // LIMPA NaN
   const safeData = data.map((item) => ({
-    subject: item.subject,
+    day: item.day,
     hours: isFinite(item.hours) ? item.hours : 0,
   }));
 
   return (
     <div style={container}>
-      <h3 style={title}>Horas por Matéria</h3>
+      <div style={header}>
+        <h3>Horas de Estudo por Dia</h3>
+        <span style={subtitle}>Últimos 7 dias</span>
+      </div>
 
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={safeData}>
-          <CartesianGrid stroke="#1e293b" />
+        <LineChart data={safeData}>
+          <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
 
-          <XAxis dataKey="subject" stroke="#94a3b8" />
+          <XAxis dataKey="day" stroke="#94a3b8" />
           <YAxis stroke="#94a3b8" />
 
           <Tooltip
@@ -40,13 +43,19 @@ export default function SubjectChart({ data }: Props) {
               if (!isFinite(Number(value))) return "0 h";
               return `${Number(value).toFixed(1)} h`;
             }}
-            labelStyle={tooltipLabel}
             contentStyle={tooltipBox}
-            cursor={{ fill: "rgba(56,189,248,0.1)" }}
+            labelStyle={tooltipLabel}
           />
 
-          <Bar dataKey="hours" fill="#22c55e" radius={[6, 6, 0, 0]} />
-        </BarChart>
+          <Line
+            type="monotone"
+            dataKey="hours"
+            stroke="#38bdf8"
+            strokeWidth={3}
+            dot={{ r: 5 }}
+            activeDot={{ r: 7 }}
+          />
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );
@@ -61,9 +70,15 @@ const container = {
   padding: "20px",
 };
 
-const title = {
-  marginBottom: "15px",
-  fontSize: "16px",
+const header = {
+  display: "flex",
+  justifyContent: "space-between",
+  marginBottom: "12px",
+};
+
+const subtitle = {
+  fontSize: "13px",
+  opacity: 0.6,
 };
 
 const tooltipBox = {
