@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 
 import { auth } from "@/app/lib/firebase";
@@ -44,7 +44,7 @@ export default function DashboardPage() {
 
   async function loadData(uid: string) {
     const s = await getSessions(uid);
-    setSessions(s);
+    setSessions(Array.isArray(s) ? s : []);
 
     const g = await getGoal(uid);
     if (g) setGoal(g);
@@ -55,11 +55,11 @@ export default function DashboardPage() {
   function getDate(createdAt: any): Date | null {
     if (!createdAt) return null;
 
-    if (createdAt.seconds) {
+    if (createdAt?.seconds) {
       return new Date(createdAt.seconds * 1000);
     }
 
-    if (createdAt.toDate) {
+    if (createdAt?.toDate) {
       return createdAt.toDate();
     }
 
@@ -68,16 +68,17 @@ export default function DashboardPage() {
 
   /* ================= CALC ================= */
 
-  function sumMinutes(filterFn: (d: Date) => boolean) {
-    return sessions
-      .filter((s) => {
-        const d = getDate(s.createdAt);
-        return d && filterFn(d);
-      })
-      .reduce((acc, cur) => acc + (cur.minutes || 0), 0);
-  }
-
   const today = new Date();
+
+  const sumMinutes = (filterFn: (d: Date) => boolean) => {
+    return sessions.reduce((acc, s) => {
+      const d = getDate(s.createdAt);
+
+      if (!d || !filterFn(d)) return acc;
+
+      return acc + (Number(s.minutes) || 0);
+    }, 0);
+  };
 
   const todayMinutes = sumMinutes(
     (d) => d.toDateString() === today.toDateString()
@@ -100,21 +101,20 @@ export default function DashboardPage() {
 
   function calcProgress(done: number, goal?: number) {
     if (!goal || goal <= 0) return 0;
-    if (!done || done <= 0) return 0;
 
     const percent = (done / goal) * 100;
 
-    if (!isFinite(percent)) return 0;
-
-    return Math.min(Math.round(percent), 100);
+    return isFinite(percent)
+      ? Math.min(Math.round(percent), 100)
+      : 0;
   }
 
   /* ================= FORMAT ================= */
 
   function formatMinutes(min: number) {
-    if (!min || !isFinite(min)) return "0h 0m";
+    if (!isFinite(min) || min <= 0) return "0h 0m";
 
-    const total = Math.max(0, Math.floor(min));
+    const total = Math.floor(min);
 
     const h = Math.floor(total / 60);
     const m = total % 60;
@@ -124,43 +124,53 @@ export default function DashboardPage() {
 
   /* ================= CHART DATA ================= */
 
-  function buildStudyLineData() {
+  /* 👉 Linha: por dia */
+  const studyLineData = useMemo(() => {
     const map: Record<string, number> = {};
 
     sessions.forEach((s) => {
       const d = getDate(s.createdAt);
       if (!d) return;
 
-      const key = d.toISOString().split("T")[0];
+      const key = d.toLocaleDateString("pt-BR");
 
       map[key] = (map[key] || 0) + s.minutes / 60;
     });
 
-    return Object.keys(map)
-      .sort() // 👉 ORDENA POR DATA
-      .map((k) => ({
-        day: new Date(k).toLocaleDateString("pt-BR"),
-        hours: Number(map[k].toFixed(1)),
+    return Object.entries(map)
+      .sort(
+        (a, b) =>
+          new Date(a[0].split("/").reverse().join("-")).getTime() -
+          new Date(b[0].split("/").reverse().join("-")).getTime()
+      )
+      .map(([day, hours]) => ({
+        day,
+        hours: Number(hours.toFixed(1)),
       }));
-  }
+  }, [sessions]);
 
-  function buildSubjectBarData() {
+  /* 👉 Barras: por matéria */
+  const subjectBarData = useMemo(() => {
     const map: Record<string, number> = {};
 
     sessions.forEach((s) => {
       if (!s.subject) return;
 
-      map[s.subject] =
-        (map[s.subject] || 0) + s.minutes / 60;
+      const subject = s.subject.trim();
+
+      if (!subject) return;
+
+      map[subject] =
+        (map[subject] || 0) + s.minutes / 60;
     });
 
-    return Object.keys(map)
-      .sort((a, b) => map[b] - map[a]) // 👉 DO MAIOR PRO MENOR
-      .map((k) => ({
-        subject: k,
-        hours: Number(map[k].toFixed(1)),
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .map(([subject, hours]) => ({
+        subject,
+        hours: Number(hours.toFixed(1)),
       }));
-  }
+  }, [sessions]);
 
   /* ================= RENDER ================= */
 
@@ -194,7 +204,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <p style={{ opacity: 0.6 }}>
-            Defina suas metas para visualizar o progresso
+            Defina suas metas
           </p>
         )}
       </section>
@@ -204,13 +214,13 @@ export default function DashboardPage() {
         <Stat title="Hoje" value={formatMinutes(todayMinutes)} />
         <Stat title="Semana" value={formatMinutes(weekMinutes)} />
         <Stat title="Mês" value={formatMinutes(monthMinutes)} />
-        <Stat title="Sessões" value={sessions.length.toString()} />
+        <Stat title="Sessões" value={String(sessions.length)} />
       </section>
 
       {/* GRÁFICOS */}
       <section style={chartsGrid}>
-        <StudyChart data={buildStudyLineData()} />
-        <SubjectChart data={buildSubjectBarData()} />
+        <StudyChart data={studyLineData} />
+        <SubjectChart data={subjectBarData} />
       </section>
     </div>
   );

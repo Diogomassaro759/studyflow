@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  LineChart,
-  Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -10,53 +10,84 @@ import {
   CartesianGrid,
 } from "recharts";
 
-type Props = {
-  data: {
-    day: string;
-    hours: number;
-  }[];
+type ChartData = {
+  subject: string;
+  hours: number;
 };
 
-export default function StudyChart({ data }: Props) {
-  // LIMPA NaN
-  const safeData = data.map((item) => ({
-    day: item.day,
-    hours: isFinite(item.hours) ? item.hours : 0,
-  }));
+type Props = {
+  data: ChartData[];
+};
+
+export default function SubjectChart({ data }: Props) {
+  /* ================= SANITIZA ================= */
+
+  const safeData: ChartData[] = (data || []).map((item) => {
+    const hours = Number(item.hours);
+
+    return {
+      subject: item.subject || "Outro",
+      hours: isFinite(hours) && hours >= 0 ? hours : 0,
+    };
+  });
+
+  const hasData = safeData.some((item) => item.hours > 0);
+
+  /* ================= FORMAT ================= */
+
+  const formatHours = (value: any) => {
+    const num = Number(value);
+    return isFinite(num) ? `${num.toFixed(1)} h` : "0.0 h";
+  };
 
   return (
     <div style={container}>
+      {/* HEADER */}
       <div style={header}>
-        <h3>Horas de Estudo por Dia</h3>
-        <span style={subtitle}>Últimos 7 dias</span>
+        <h2 style={mainTitle}>Estudos por Matéria</h2>
+        <span style={subtitle}>Distribuição total</span>
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={safeData}>
-          <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+      {/* CHART */}
+      {hasData ? (
+        <div style={chartWrapper}>
+          <ResponsiveContainer width="95%" height={300}>
+            <BarChart data={safeData}>
+              <CartesianGrid
+                stroke="#1e293b"
+                strokeDasharray="3 3"
+              />
 
-          <XAxis dataKey="day" stroke="#94a3b8" />
-          <YAxis stroke="#94a3b8" />
+              <XAxis
+                dataKey="subject"
+                stroke="#94a3b8"
+                tick={{ fontSize: 12 }}
+              />
 
-          <Tooltip
-            formatter={(value: any) => {
-              if (!isFinite(Number(value))) return "0 h";
-              return `${Number(value).toFixed(1)} h`;
-            }}
-            contentStyle={tooltipBox}
-            labelStyle={tooltipLabel}
-          />
+              <YAxis
+                stroke="#94a3b8"
+                tickFormatter={(v) => `${v}h`}
+              />
 
-          <Line
-            type="monotone"
-            dataKey="hours"
-            stroke="#38bdf8"
-            strokeWidth={3}
-            dot={{ r: 5 }}
-            activeDot={{ r: 7 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+              <Tooltip
+                formatter={formatHours}
+                contentStyle={tooltipBox}
+                labelStyle={tooltipLabel}
+              />
+
+              <Bar
+                dataKey="hours"
+                fill="#22c55e"
+                radius={[6, 6, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div style={emptyState}>
+          Nenhum dado por matéria
+        </div>
+      )}
     </div>
   );
 }
@@ -67,18 +98,27 @@ const container = {
   background: "#020617",
   border: "1px solid #1e293b",
   borderRadius: "14px",
-  padding: "20px",
+  padding: "22px",
 };
 
 const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  marginBottom: "12px",
+  marginBottom: "16px",
+};
+
+const mainTitle = {
+  fontSize: "18px",
+  fontWeight: "600",
 };
 
 const subtitle = {
-  fontSize: "13px",
+  fontSize: "12px",
   opacity: 0.6,
+};
+
+const chartWrapper = {
+  width: "100%",
+  display: "flex",
+  justifyContent: "center",
 };
 
 const tooltipBox = {
@@ -86,9 +126,18 @@ const tooltipBox = {
   border: "1px solid #1e293b",
   borderRadius: "8px",
   color: "#e5e7eb",
+  padding: "8px 10px",
 };
 
 const tooltipLabel = {
-  color: "#38bdf8",
+  color: "#22c55e",
   fontWeight: "bold",
+};
+
+const emptyState = {
+  height: "300px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#64748b",
 };

@@ -8,7 +8,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
-  Area,
 } from "recharts";
 
 type Props = {
@@ -19,59 +18,72 @@ type Props = {
 };
 
 export default function StudyChart({ data }: Props) {
+  /* ================= CLEAN DATA ================= */
+
+  const safeData = data
+    .map((item) => ({
+      day: item.day || "",
+      hours: Number.isFinite(item.hours) ? item.hours : 0,
+    }))
+    // Ordena por data
+    .sort((a, b) => {
+      const da = new Date(a.day.split("/").reverse().join("-"));
+      const db = new Date(b.day.split("/").reverse().join("-"));
+      return da.getTime() - db.getTime();
+    });
+
+  /* ================= MAX Y ================= */
+
+  const maxValue =
+    Math.max(...safeData.map((d) => d.hours), 1) + 0.5;
+
   return (
     <div style={container}>
       <div style={header}>
-        <h3 style={title}>Horas de Estudo por Dia</h3>
+        <h3>Horas de Estudo por Dia</h3>
         <span style={subtitle}>Últimos 7 dias</span>
       </div>
 
-      <ResponsiveContainer width="100%" height={260}>
-        <LineChart data={data}>
-          <defs>
-            <linearGradient id="studyGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.05} />
-            </linearGradient>
-          </defs>
-
-          <CartesianGrid stroke="#020617" />
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={safeData}>
+          <CartesianGrid
+            stroke="#1e293b"
+            strokeDasharray="3 3"
+          />
 
           <XAxis
             dataKey="day"
-            stroke="#64748b"
-            tickLine={false}
-            axisLine={false}
+            stroke="#94a3b8"
+            tick={{ fontSize: 12 }}
           />
 
           <YAxis
-            stroke="#64748b"
-            tickLine={false}
-            axisLine={false}
+            stroke="#94a3b8"
+            domain={[0, maxValue]}
+            tickFormatter={(v) => `${v}h`}
+            tick={{ fontSize: 12 }}
           />
 
-          <Tooltip
-            contentStyle={tooltipBox}
-            labelStyle={tooltipLabel}
-            cursor={{ stroke: "#38bdf8", strokeDasharray: "4 4" }}
-          />
+          <Tooltip content={<CustomTooltip />} />
 
-          {/* Area sombra */}
-          <Area
-            type="monotone"
-            dataKey="hours"
-            fill="url(#studyGradient)"
-            stroke="none"
-          />
-
-          {/* Linha principal */}
           <Line
             type="monotone"
             dataKey="hours"
             stroke="#38bdf8"
             strokeWidth={3}
-            dot={{ r: 4 }}
-            activeDot={{ r: 6 }}
+            dot={{
+              r: 5,
+              stroke: "#38bdf8",
+              strokeWidth: 2,
+              fill: "#020617",
+            }}
+            activeDot={{
+              r: 7,
+              stroke: "#38bdf8",
+              strokeWidth: 2,
+              fill: "#020617",
+            }}
+            animationDuration={800}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -79,31 +91,44 @@ export default function StudyChart({ data }: Props) {
   );
 }
 
+/* ================= TOOLTIP ================= */
+
+function CustomTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+
+  const value = payload[0]?.value;
+
+  const hours = Number.isFinite(value)
+    ? value.toFixed(2)
+    : "0.00";
+
+  return (
+    <div style={tooltipBox}>
+      <p style={tooltipLabel}>{label}</p>
+      <p>{hours} horas</p>
+    </div>
+  );
+}
+
 /* ================= STYLES ================= */
 
 const container = {
-  background: "linear-gradient(180deg,#020617,#020617cc)",
+  background: "#020617",
   border: "1px solid #1e293b",
-  borderRadius: "18px",
-  padding: "22px",
-  boxShadow: "0 0 20px rgba(56,189,248,0.08)",
+  borderRadius: "16px",
+  padding: "20px",
 };
 
 const header = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: "16px",
-};
-
-const title = {
-  fontSize: "17px",
-  fontWeight: "bold",
+  marginBottom: "12px",
 };
 
 const subtitle = {
-  fontSize: "12px",
-  color: "#64748b",
+  fontSize: "13px",
+  opacity: 0.6,
 };
 
 const tooltipBox = {
@@ -111,9 +136,11 @@ const tooltipBox = {
   border: "1px solid #1e293b",
   borderRadius: "8px",
   padding: "8px 12px",
+  color: "#e5e7eb",
 };
 
 const tooltipLabel = {
   color: "#38bdf8",
-  fontWeight: "bold",
+  fontWeight: "600",
+  marginBottom: "4px",
 };
