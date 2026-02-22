@@ -70,8 +70,6 @@ export default function TimerPage() {
   function parseTimeToSeconds(time: string) {
     if (!time) return 0;
 
-    // Ex: "2h30", "2h", "1h45"
-
     const hMatch = time.match(/(\d+)h/);
     const mMatch = time.match(/(\d+)m/);
 
@@ -225,12 +223,23 @@ export default function TimerPage() {
         {/* SAVE */}
 
         {finished && (
-          <button
-            onClick={save}
-            style={btnGreen}
-          >
-            Salvar Sessão
-          </button>
+          <>
+            <p
+              style={{
+                textAlign: "center",
+                marginBottom: 12,
+              }}
+            >
+              Tempo concluído!
+            </p>
+
+            <button
+              onClick={save}
+              style={btnGreen}
+            >
+              Salvar no Dashboard
+            </button>
+          </>
         )}
       </section>
     </div>
@@ -242,8 +251,7 @@ export default function TimerPage() {
 const page = {
   minHeight: "100vh",
   padding: "32px",
-  background:
-    "linear-gradient(180deg,#020617,#000)",
+  background: "linear-gradient(180deg,#020617,#000)",
   color: "#e5e7eb",
 };
 
